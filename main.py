@@ -21,8 +21,8 @@ def load_saved_data():
 def predict_user_location(reviews):
     x = y = 0
     for r in reviews:
-        x += eval(sites[r['place_id']]['coord'][0])
-        y += eval(sites[r['place_id']]['coord'][1])
+        x += eval(sites[str(r['place_id'])]['coord'][0])
+        y += eval(sites[str(r['place_id'])]['coord'][1])
     return x / len(reviews), y / len(reviews)
 
 
@@ -33,15 +33,16 @@ def predict_location_radius(reviews):
 def get_user_avg_cost(reviews):
     dollar_signs_sum = count = 0
     for r in reviews:
-        if sites[r['place_id']]['cost'] is None:
+        cost = sites[str(r['place_id'])]['cost']
+        if cost is None:
             continue
-        elif sites[r['place_id']]['cost'] == '$':
+        elif cost == '$':
             dollar_signs_sum += 1
-        elif sites[r['place_id']]['cost'] == '$$':
+        elif cost == '$$':
             dollar_signs_sum += 2
-        elif sites[r['place_id']]['cost'] == '$$$':
+        elif cost == '$$$':
             dollar_signs_sum += 3
-        elif sites[r['place_id']]['cost'] == '$$$$':
+        elif cost == '$$$$':
             dollar_signs_sum += 4
         count += 1
     if count == 0:
@@ -57,7 +58,7 @@ def collect_tags(reviews, sites):
         site_type = review['type']
         if site_type not in tags:
             tags[site_type] = {}
-        for tag in sites[review['place_id']]['tags']:
+        for tag in sites[str(review['place_id'])]['tags']:
             if tag not in tags[site_type]:
                 tags[site_type][tag] = 0
             tags[site_type][tag] += 1
