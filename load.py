@@ -50,13 +50,18 @@ def store_data(review_group, sites, site_types):
     file.close()
 
 if __name__ == "__main__":
-    reviews = read_review_data('data2.json')
+    reviews = read_review_data('data.json')
     geolocator = Nominatim(user_agent="CSC533")
     review_group, sites, site_types = load_saved_data()
+    # review_group, sites, site_types = {}, {}, {}
     hash_address = {}
     count = 0
     print(len(reviews))
     for i, review in enumerate(reviews):
+        if i < 2700:
+            continue
+        elif i == 3000:
+            break
         print(i, count)
         #store site data from reviews
         if review['Location']['Address'] in hash_address:

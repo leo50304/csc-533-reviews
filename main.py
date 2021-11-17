@@ -1,7 +1,8 @@
-from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import json
 from scipy import stats
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
 
 def load_saved_data():
     with open('review_group.json', "r") as file:
@@ -25,26 +26,27 @@ def predict_user_location(reviews):
         y += eval(sites[str(r['place_id'])]['coord'][1])
     return x / len(reviews), y / len(reviews)
 
-
-def predict_location_radius(reviews):
-    return 15
-
+def transform_dollar_sign(dollar):
+    if dollar == '$':
+        return 1
+    elif dollar == '$$':
+        return 2
+    elif dollar == '$$$':
+        return 3
+    elif dollar == '$$$$':
+        return 4
+    else:
+        return 0
 
 def get_user_avg_cost(reviews):
     dollar_signs_sum = count = 0
     for r in reviews:
-        cost = sites[str(r['place_id'])]['cost']
+        cost = transform_dollar_sign(sites[str(r['place_id'])]['cost'])
         if cost is None:
             continue
-        elif cost == '$':
-            dollar_signs_sum += 1
-        elif cost == '$$':
-            dollar_signs_sum += 2
-        elif cost == '$$$':
-            dollar_signs_sum += 3
-        elif cost == '$$$$':
-            dollar_signs_sum += 4
-        count += 1
+        else:
+            dollar_signs_sum += cost
+            count += 1
     if count == 0:
         return 0
     return dollar_signs_sum / count
@@ -55,40 +57,20 @@ def calculate_distance(site1, site2):
 def collect_tags(reviews, sites):
     tags = {}
     for review in reviews:
-        site_type = review['type']
-        if site_type not in tags:
-            tags[site_type] = {}
         for tag in sites[str(review['place_id'])]['tags']:
-            if tag not in tags[site_type]:
-                tags[site_type][tag] = 0
-            tags[site_type][tag] += 1
+            if tag not in tags:
+                tags[tag] = 0
+            tags[tag] += 1
     return tags
 
-def compute_tag_similarity_score(user_tags, sites):
-    result = {}
-    count_tag = 0
-    for tag in user_tags.values():
-        count_tag += tag
-    for site in sites.values():
-        score = 0
-        for tag in site['tags']:
-            if tag in user_tags:
-                score += user_tags[tag]
-        result[site['name']] = score/count_tag
-    return result
-
-# count the numbers of same tags
-def get_tag_similarity(reviews, sites, site_types):
-    user_tags = collect_tags(reviews, sites)
-    result = {}
-    for site_type in site_types:
-        if site_type not in user_tags:
-            result[site_type] = None
-            continue
-        result[site_type] = compute_tag_similarity_score(user_tags[site_type], sites)
-        break
-    sort_tag_score(result)
-    return result
+def compute_tag_similarity_score(user_tags, site):
+    score = 0
+    for tag in site['tags']:
+        if tag in user_tags:
+            score += user_tags[tag]
+    if len(user_tags) == 0:
+        return 0
+    return score/len(user_tags)
 
 def set_initial_data(review, raw_site_data):
     site_data = {
@@ -132,19 +114,81 @@ def store_data(review_group, sites, site_types):
     file.close()
     
 if __name__ == "__main__":
+    # arrange data
     review_group, sites, site_types = load_saved_data()
-    print(sites)
     user_costs = {}
     for user, review in review_group.items():
         user_costs[user] = get_user_avg_cost(review)
-
     for user in review_group:
         percentile = wealthness_percentile(user_costs, user)
-        print(user, percentile)
+    
+    #training with the first half of our data
+    print("Start training")
+    x, y = [], []
+    i = 0
+    for user, reviews in review_group.items():
+        i += 1
+        if i % 2 == 1:
+            continue
+        user_location = predict_user_location(reviews)
+        user_tags = collect_tags(reviews, sites)
+        
+        for place_id, site in sites.items():
+            tag_score = compute_tag_similarity_score(user_tags, site)
+            distance = geodesic(user_location, site['coord']).miles
+            cost_diff = transform_dollar_sign(site['cost']) - user_costs[user]
+            x.append([tag_score, distance, cost_diff])
+            hit = 0
+            for review in reviews:
+                if str(review['place_id']) == str(place_id):
+                    hit = 1
+                    break
+            y.append(hit)
 
+    model = LogisticRegression(solver='lbfgs')
+    model.fit(x, y)
+    yhat = model.predict(x)
+    acc = accuracy_score(y, yhat)
+    print("Finish training")
 
-    #find sites containing tags that most similar to the user, categorized by site types
-    tag_scores = get_tag_similarity(review_group['110540965997813227851'], sites, site_types)
-    user_location = predict_user_location(review_group['110540965997813227851'])
-    top_scores = get_top_tag_by_type(tag_scores, 'house', 2)
-    # print(top_scores, user_location)
+    #predicting with the second half of our data
+    print("Start prediction test")
+    i = 0
+    count_skip = 0
+    count_hit = 0
+    count_guess = 0
+    count_type = {}
+    for user, reviews in review_group.items():
+        i += 1
+        if i % 2 == 0:
+            continue
+        user_location = predict_user_location(reviews)
+        user_tags = collect_tags(reviews, sites)
+        
+        old_count_guess = count_guess
+        for place_id, site in sites.items():
+            tag_score = compute_tag_similarity_score(user_tags, site)
+            distance = geodesic(user_location, site['coord']).miles
+            cost_diff = transform_dollar_sign(site['cost']) - user_costs[user]
+            x = [[tag_score, distance, cost_diff]]
+            hit = 0
+            for review in reviews:
+                if str(review['place_id']) == str(place_id):
+                    hit = 1
+                    break
+            new_output = model.predict(x)
+            if new_output == 1:
+                if site['type'] not in count_type:
+                    count_type[site['type']] = 0
+                count_type[site['type']] += 1
+                count_guess += 1
+                if new_output == hit:
+                    count_hit += 1
+        if count_guess == old_count_guess:
+            count_skip +=1
+            continue
+
+    print("attemped sites' type:", count_type)
+    rate = count_hit/count_guess
+    print("{} guesses hit / {} guesses, accuracy:{} %".format(count_hit, count_guess, round(rate*100, 3)))
+    print("{} user skipped with no guesses / {} users".format(count_skip, len(review_group)))
