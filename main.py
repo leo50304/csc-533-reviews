@@ -112,7 +112,7 @@ def store_data(review_group, sites, site_types):
     with open('site_types.json', 'w') as file:
         file.write(json.dumps(site_types))
     file.close()
-    
+
 if __name__ == "__main__":
     # arrange data
     review_group, sites, site_types = load_saved_data()
@@ -121,14 +121,18 @@ if __name__ == "__main__":
         user_costs[user] = get_user_avg_cost(review)
     for user in review_group:
         percentile = wealthness_percentile(user_costs, user)
-    
+    count_review = 0
+    for reviews in review_group.values():
+        count_review += len(reviews)
+    print("Data arrange complete: {} sites, {} users, {} reviews.".format(len(sites), len(review_group), count_review))
+
     #training with the first half of our data
     print("Start training")
     x, y = [], []
     i = 0
     for user, reviews in review_group.items():
         i += 1
-        if i % 2 == 1:
+        if i % 2 == 0:
             continue
         user_location = predict_user_location(reviews)
         user_tags = collect_tags(reviews, sites)
@@ -160,7 +164,7 @@ if __name__ == "__main__":
     count_type = {}
     for user, reviews in review_group.items():
         i += 1
-        if i % 2 == 0:
+        if i % 2 == 1:
             continue
         user_location = predict_user_location(reviews)
         user_tags = collect_tags(reviews, sites)
@@ -188,7 +192,7 @@ if __name__ == "__main__":
             count_skip +=1
             continue
 
-    print("attemped sites' type:", count_type)
+    # print("attemped sites' type:", count_type)
     rate = count_hit/count_guess
-    print("{} guesses hit / {} guesses, accuracy:{} %".format(count_hit, count_guess, round(rate*100, 3)))
-    print("{} user skipped with no guesses / {} users".format(count_skip, len(review_group)))
+    print("{} guesses hit/{} guesses, accuracy: {}%".format(count_hit, count_guess, round(rate*100, 3)))
+    print("{} user skipped with no guesses/{} users".format(count_skip, len(review_group)))
