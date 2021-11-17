@@ -57,6 +57,9 @@ def calculate_distance(site1, site2):
 def collect_tags(reviews, sites):
     tags = {}
     for review in reviews:
+        if review['type'] not in tags:
+            tags[review['type']] = 0
+        tags[review['type']] += 1
         for tag in sites[str(review['place_id'])]['tags']:
             if tag not in tags:
                 tags[tag] = 0
@@ -65,6 +68,8 @@ def collect_tags(reviews, sites):
 
 def compute_tag_similarity_score(user_tags, site):
     score = 0
+    if site['type'] in user_tags:
+        score += 1
     for tag in site['tags']:
         if tag in user_tags:
             score += user_tags[tag]
@@ -132,7 +137,7 @@ if __name__ == "__main__":
     i = 0
     for user, reviews in review_group.items():
         i += 1
-        if i % 2 == 0:
+        if i < len(review_group)/2:
             continue
         user_location = predict_user_location(reviews)
         user_tags = collect_tags(reviews, sites)
@@ -164,8 +169,8 @@ if __name__ == "__main__":
     count_type = {}
     for user, reviews in review_group.items():
         i += 1
-        if i % 2 == 1:
-            continue
+        if i >= len(review_group)/2:
+            break
         user_location = predict_user_location(reviews)
         user_tags = collect_tags(reviews, sites)
         
@@ -195,4 +200,4 @@ if __name__ == "__main__":
     # print("attemped sites' type:", count_type)
     rate = count_hit/count_guess
     print("{} guesses hit/{} guesses, accuracy: {}%".format(count_hit, count_guess, round(rate*100, 3)))
-    print("{} user skipped with no guesses/{} users".format(count_skip, len(review_group)))
+    print("{} user skipped with no guesses/{} users".format(count_skip, len(review_group)/2))
