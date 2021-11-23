@@ -54,9 +54,11 @@ def get_user_avg_cost(reviews):
 def calculate_distance(site1, site2):
     return geodesic(site1['coord'], site2['coord']).miles
 
-def collect_tags(reviews, sites):
+def collect_tags(reviews, sites, place_id):
     tags = {}
     for review in reviews:
+        if review['place_id'] == place_id:
+            continue
         if review['type'] not in tags:
             tags[review['type']] = 0
         tags[review['type']] += 1
@@ -140,9 +142,9 @@ if __name__ == "__main__":
         if i < len(review_group)/2:
             continue
         user_location = predict_user_location(reviews)
-        user_tags = collect_tags(reviews, sites)
         
         for place_id, site in sites.items():
+            user_tags = collect_tags(reviews, sites, place_id)
             tag_score = compute_tag_similarity_score(user_tags, site)
             distance = geodesic(user_location, site['coord']).miles
             cost_diff = transform_dollar_sign(site['cost']) - user_costs[user]
@@ -167,15 +169,16 @@ if __name__ == "__main__":
     count_hit = 0
     count_guess = 0
     count_type = {}
+    count_type_success = {}
     for user, reviews in review_group.items():
         i += 1
         if i >= len(review_group)/2:
             break
         user_location = predict_user_location(reviews)
-        user_tags = collect_tags(reviews, sites)
         
         old_count_guess = count_guess
         for place_id, site in sites.items():
+            user_tags = collect_tags(reviews, sites, place_id)
             tag_score = compute_tag_similarity_score(user_tags, site)
             distance = geodesic(user_location, site['coord']).miles
             cost_diff = transform_dollar_sign(site['cost']) - user_costs[user]
@@ -193,11 +196,15 @@ if __name__ == "__main__":
                 count_guess += 1
                 if new_output == hit:
                     count_hit += 1
+                    if site['type'] not in count_type_success:
+                        count_type_success[site['type']] = 0
+                    count_type_success[site['type']] += 1
         if count_guess == old_count_guess:
             count_skip +=1
             continue
 
-    # print("attemped sites' type:", count_type)
     rate = count_hit/count_guess
     print("{} guesses hit/{} guesses, accuracy: {}%".format(count_hit, count_guess, round(rate*100, 3)))
     print("{} user skipped with no guesses/{} users".format(count_skip, len(review_group)/2))
+    print("attemped sites' type:", count_type)
+    print("success sites' type:", count_type_success)
